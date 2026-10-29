@@ -12,3 +12,9 @@
 - GIF merge with shuffled order and reduced adjacent duplicates.
 - Preserves frame durations where possible.
 - Falls back to ffmpeg when Pillow cannot decode a GIF.
+
+## 2026-10-29
+
+- Fixed avoidable adjacent duplicates in shuffled GIF blocks.
+- Excluded the previous merged.gif output and directories from inputs; accepted uppercase GIF extensions.
+- Added deterministic regression checks for feasible and impossible ordering cases.

@@ -103,36 +103,37 @@ def get_gif_frames(path: Path) -> list[tuple[Image.Image, int]]:
 
 
 def shuffle_no_consecutive(items: list) -> list:
+    """Choose the most frequent eligible item; randomize ties.
+
+    A feasible input never gets adjacent duplicates. If one item is too frequent,
+    keep every item and accept only the unavoidable repetitions.
     """
-    Перемешивает список так, чтобы одинаковые элементы не шли подряд.
-    Использует жадный алгоритм: на каждом шаге выбираем случайный элемент,
-    отличный от предыдущего.
-    """
-    if not items:
-        return []
-    if len(items) == 1:
-        return items
+    from collections import Counter
+    import heapq
 
-    # Группируем по идентичности (для нас важен путь к GIF)
-    pool = list(items)
-    random.shuffle(pool)
-
-    result = [pool.pop()]
-    last = result[0]
-
-    while pool:
-        # Собираем кандидатов, отличных от last
-        candidates = [i for i, x in enumerate(pool) if x != last]
-        if not candidates:
-            # Все оставшиеся совпадают с last — берём любого, нарушение неизбежно
-            idx = random.randint(0, len(pool) - 1)
-        else:
-            idx = random.choice(candidates)
-        item = pool.pop(idx)
+    heap = [(-count, random.random(), item) for item, count in Counter(items).items()]
+    heapq.heapify(heap)
+    result = []
+    while heap:
+        count, tie, item = heapq.heappop(heap)
+        held = None
+        if result and item == result[-1] and heap:
+            held = (count, tie, item)
+            count, tie, item = heapq.heappop(heap)
         result.append(item)
-        last = item
-
+        if count < -1:
+            heapq.heappush(heap, (count + 1, random.random(), item))
+        if held is not None:
+            heapq.heappush(heap, held)
     return result
+
+
+def find_gif_inputs(folder: Path, out_path: Path) -> list[Path]:
+    """Find GIF files without feeding a previous merged result back into itself."""
+    output = out_path.resolve()
+    return sorted(p for p in folder.iterdir()
+                  if p.is_file() and p.suffix.lower() == '.gif' and p.resolve() != output)
+
 
 
 def select_folder() -> Path | None:
@@ -190,7 +191,8 @@ def main() -> None:
         print('Папка не выбрана.')
         return
 
-    gif_files = sorted(folder.glob('*.gif'))
+    out_path = folder / 'merged.gif'
+    gif_files = find_gif_inputs(folder, out_path)
     if not gif_files:
         print(f'В папке {folder} нет GIF-файлов.')
         return
@@ -202,8 +204,6 @@ def main() -> None:
     # Каждый GIF по 3 раза
     gif_paths = [gif_files[i] for i in range(len(gif_files)) for _ in range(3)]
     shuffled = shuffle_no_consecutive(gif_paths)
-    out_path = folder / 'merged.gif'
-
     # Сначала пробуем ffmpeg concat — без загрузки кадров в память
     if _merge_via_ffmpeg_concat(shuffled, out_path):
         print(f'Готово: {out_path}')
